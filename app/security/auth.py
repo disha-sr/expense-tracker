@@ -1,10 +1,13 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
 import jwt
 from app.security.jwt import oauth2_scheme, SECRET_KEY, ALGORITHM
 from app.database.database import get_db
 from app.models.user import User
-
+from app.exceptions.auth import (
+    InvalidTokenException,
+    UserNotFoundException
+)
 def get_token(
     token: str = Depends(oauth2_scheme)
 ):
@@ -21,10 +24,7 @@ def verify_token(token: str):
         return payload
 
     except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
+        raise InvalidTokenException()
 
 def get_current_token(
     token: str = Depends(oauth2_scheme)
@@ -40,9 +40,6 @@ def get_current_user(
     user = db.query(User).filter(User.id == int(user_id)).first()
 
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
-        )
+        raise UserNotFoundException()
 
     return user

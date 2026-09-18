@@ -1,14 +1,22 @@
 from fastapi import APIRouter, Depends
+
 from sqlalchemy.orm import Session
 from sqlalchemy import select
+
 from app.models.user import User
 from app.database.database import get_db
-from app.schemas.user import UserCreate
-from fastapi import HTTPException
-from app.security.password import hash_password
+
 from app.schemas.user import UserCreate, UserLogin
+
 from app.security.password import hash_password, verify_password
+
 from app.security.jwt import create_access_token
+
+from app.exceptions.auth import (
+    EmailAlreadyRegisteredException,
+    InvalidCredentialsException
+)
+
 
 router = APIRouter(
     prefix="/auth",
@@ -22,27 +30,30 @@ def register_user(
     db: Session = Depends(get_db)
 ):
     result = db.execute(
-    select(User).where(User.email == user.email)
-)
+        select(User).where(User.email == user.email)
+    )
 
     existing_user = result.scalar_one_or_none()
+
     if existing_user is not None:
-        raise HTTPException(
-            status_code=400,
-            detail="Email already registered"
-        )
+        raise EmailAlreadyRegisteredException()
+
     hashed_password = hash_password(user.password)
+
     new_user = User(
-    email=user.email,
-    password_hash=hashed_password
-)
+        email=user.email,
+        password_hash=hashed_password
+    )
+
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+
     return {
-    "id": new_user.id,
-    "email": new_user.email
-}
+        "id": new_user.id,
+        "email": new_user.email
+    }
+
 
 @router.post("/login")
 def login_user(
@@ -56,10 +67,7 @@ def login_user(
     existing_user = result.scalar_one_or_none()
 
     if existing_user is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid email or password"
-        )
+        raise InvalidCredentialsException()
 
     password_valid = verify_password(
         user.password,
@@ -67,15 +75,13 @@ def login_user(
     )
 
     if not password_valid:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid email or password"
-        )
+        raise InvalidCredentialsException()
+
     access_token = create_access_token({
-    "sub": str(existing_user.id)
+        "sub": str(existing_user.id)
     })
 
     return {
-    "access_token": access_token,
-    "token_type": "bearer"
+        "access_token": access_token,
+        "token_type": "bearer"
     }

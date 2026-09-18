@@ -1,16 +1,17 @@
+from app.exceptions.expense import InvalidExpenseRequestException
 from app.schemas.expense import (
     ExpenseCreate,
     ExpenseResponse,
     ExpenseListResponse
 )
 from datetime import date
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from app.database.database import get_db
 from app.models.expense import Expense
 from app.security.auth import get_current_user
-
+from app.exceptions.expense import ExpenseNotFoundException
 router = APIRouter(
     prefix="/expenses",
     tags=["Expenses"]
@@ -31,10 +32,9 @@ def get_expenses(
     current_user = Depends(get_current_user)
 ):
     if start_date and end_date and start_date > end_date:
-            raise HTTPException(
-                status_code=400,
-                detail="start_date cannot be after end_date"
-        )
+        raise InvalidExpenseRequestException(
+            "start_date cannot be after end_date"
+    )
     query = select(Expense).where(
     Expense.user_id == current_user.id
 )
@@ -98,10 +98,7 @@ def get_expense(
     expense = result.scalar_one_or_none()
 
     if expense is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Expense not found"
-        )
+        raise ExpenseNotFoundException()
 
     return expense
 
@@ -143,10 +140,7 @@ def update_expense(
     expense = result.scalar_one_or_none()
 
     if expense is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Expense not found"
-        )
+        raise ExpenseNotFoundException()
 
     expense.amount = expense_data.amount
     expense.description = expense_data.description
@@ -174,10 +168,7 @@ def delete_expense(
     expense = result.scalar_one_or_none()
 
     if expense is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Expense not found"
-        )
+        raise ExpenseNotFoundException()
 
     db.delete(expense)
     db.commit()

@@ -1,11 +1,17 @@
 from datetime import date
 from decimal import Decimal
 from app.models.expense import Expense
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func,select
 from app.database.database import get_db
 from app.models.budget import Budget
+from app.exceptions.budget import (
+    BudgetNotFoundException,
+    DuplicateBudgetException,
+    InvalidBudgetRequestException,
+    BudgetPageNotFoundException
+)
 from app.schemas.budget import (
     BudgetCreate,
     BudgetResponse,
@@ -95,10 +101,7 @@ def create_budget(
     ).scalar_one_or_none()
 
     if existing_budget:
-        raise HTTPException(
-            status_code=400,
-            detail="Budget already exists for this category and month"
-        )
+        raise DuplicateBudgetException()
 
     new_budget = Budget(
         category=budget.category,
@@ -138,21 +141,18 @@ def get_budgets(
     "category": Budget.category,
 }
     if sort_by not in allowed_sort_fields:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid sort field. Allowed values: {list(allowed_sort_fields.keys())}"
-        )
+        raise InvalidBudgetRequestException(
+            f"Invalid sort field. Allowed values: {list(allowed_sort_fields.keys())}"
+    )
     if sort_order not in {"asc", "desc"}:
-        raise HTTPException(
-            status_code=400,
-            detail="sort_order must be 'asc' or 'desc'"
-        )
+        raise InvalidBudgetRequestException(
+            "sort_order must be 'asc' or 'desc'"
+    )
     if min_amount is not None and max_amount is not None:
         if min_amount > max_amount:
-            raise HTTPException(
-                status_code=400,
-                detail="min_amount cannot be greater than max_amount"
-        )
+            raise InvalidBudgetRequestException(
+                "min_amount cannot be greater than max_amount"
+    )
     query = select(Budget)
     offset = (page - 1) * limit
     if month is not None:
@@ -174,10 +174,9 @@ def get_budgets(
     has_previous = page > 1
     
     if total_pages > 0 and page > total_pages:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Page {page} does not exist. Total pages: {total_pages}"
-        )
+        raise BudgetPageNotFoundException(
+            f"Page {page} does not exist. Total pages: {total_pages}"
+    )
     sort_column = allowed_sort_fields[sort_by]
 
     if sort_order == "desc":
@@ -220,10 +219,7 @@ def update_budget(
     budget = result.scalar_one_or_none()
 
     if budget is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Budget not found"
-        )
+        raise BudgetNotFoundException()
 
     # Check for duplicate category + month + year
     existing_budget = db.execute(
@@ -235,11 +231,8 @@ def update_budget(
         )
     ).scalar_one_or_none()
 
-    if existing_budget:
-        raise HTTPException(
-            status_code=400,
-            detail="Budget already exists for this category and month"
-        )
+    if budget is None:
+        raise BudgetNotFoundException()
 
     budget.category = budget_data.category
     budget.amount = budget_data.amount
@@ -266,10 +259,7 @@ def get_budget(
     budget = result.scalar_one_or_none()
 
     if budget is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Budget not found"
-        )
+        raise BudgetNotFoundException()
 
     return build_budget_response(budget, db)
 
@@ -289,10 +279,7 @@ def delete_budget(
     budget = result.scalar_one_or_none()
 
     if budget is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Budget not found"
-        )
+        raise BudgetNotFoundException()
 
     db.delete(budget)
     db.commit()
