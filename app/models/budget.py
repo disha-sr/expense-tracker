@@ -2,7 +2,7 @@ from decimal import Decimal
 from sqlalchemy import Numeric
 from sqlalchemy import Integer, String, UniqueConstraint, Numeric
 from sqlalchemy.orm import Mapped, mapped_column
-
+from sqlalchemy import Integer, String, UniqueConstraint, Numeric, ForeignKey
 from app.database.database import Base
 
 
@@ -11,10 +11,11 @@ class Budget(Base):
 
     __table_args__ = (
         UniqueConstraint(
+            "user_id",
             "category",
             "month",
             "year",
-            name="uq_budget_category_month_year"
+            name="uq_budget_user_category_month_year"
         ),
     )
 
@@ -22,6 +23,11 @@ class Budget(Base):
         Integer,
         primary_key=True,
         index=True
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=False
     )
 
     category: Mapped[str] = mapped_column(

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-
+from app.security.auth import get_current_user
 from app.database.database import get_db
 from app.models.expense import Expense
 from datetime import date
@@ -22,10 +22,14 @@ router = APIRouter(
     response_model=TotalExpenseResponse
 )
 def get_total_expenses(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     total = db.execute(
         select(func.sum(Expense.amount))
+        .where(
+            Expense.user_id == current_user.id
+        )
     ).scalar()
 
     return {
@@ -39,7 +43,8 @@ def get_total_expenses(
 def get_monthly_report(
     year: int = Query(..., ge=2000),
     month: int = Query(..., ge=1, le=12),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     start_date = date(year, month, 1)
 
@@ -51,6 +56,7 @@ def get_monthly_report(
     total = db.execute(
         select(func.sum(Expense.amount))
         .where(
+            Expense.user_id == current_user.id,
             Expense.expense_date >= start_date,
             Expense.expense_date < end_date
         )
@@ -69,7 +75,8 @@ def get_monthly_report(
 def get_category_report(
     year: int = Query(..., ge=2000),
     month: int = Query(..., ge=1, le=12),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     start_date = date(year, month, 1)
 
@@ -84,6 +91,7 @@ def get_category_report(
             func.sum(Expense.amount).label("total")
         )
         .where(
+            Expense.user_id == current_user.id,
             Expense.expense_date >= start_date,
             Expense.expense_date < end_date
         )

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func,select
 from app.database.database import get_db
 from app.models.budget import Budget
+from app.security.auth import get_current_user
 from app.schemas.budget import (
     BudgetCreate,
     BudgetResponse,
@@ -45,6 +46,7 @@ def calculate_budget_utilization(
     spent = db.execute(
         select(func.sum(Expense.amount))
         .where(
+            Expense.user_id == budget.user_id,
             Expense.category == budget.category,
             Expense.expense_date >= start_date,
             Expense.expense_date < end_date
@@ -84,10 +86,12 @@ def build_budget_response(
 )
 def create_budget(
     budget: BudgetCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     existing_budget = db.execute(
         select(Budget).where(
+            Budget.user_id == current_user.id,
             Budget.category == budget.category,
             Budget.month == budget.month,
             Budget.year == budget.year
@@ -104,14 +108,16 @@ def create_budget(
         category=budget.category,
         amount=budget.amount,
         month=budget.month,
-        year=budget.year
+        year=budget.year,
+        user_id=current_user.id
     )
+
 
     db.add(new_budget)
     db.commit()
     db.refresh(new_budget)
 
-    return build_budget_response(budget, db)
+    return build_budget_response(new_budget, db)
 
   
 @router.get(
@@ -128,7 +134,8 @@ def get_budgets(
     limit: int = Query(10, ge=1, le=100),
     sort_by: str = Query("id"),
     sort_order: str = Query("asc"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     allowed_sort_fields = {
     "id": Budget.id,
@@ -153,7 +160,9 @@ def get_budgets(
                 status_code=400,
                 detail="min_amount cannot be greater than max_amount"
         )
-    query = select(Budget)
+    query = select(Budget).where(
+        Budget.user_id == current_user.id
+    )
     offset = (page - 1) * limit
     if month is not None:
         query = query.where(Budget.month == month)
@@ -211,11 +220,15 @@ def get_budgets(
 def update_budget(
     budget_id: int,
     budget_data: BudgetUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     result = db.execute(
-        select(Budget).where(Budget.id == budget_id)
+    select(Budget).where(
+        Budget.id == budget_id,
+        Budget.user_id == current_user.id
     )
+)
 
     budget = result.scalar_one_or_none()
 
@@ -257,12 +270,15 @@ def update_budget(
 )
 def get_budget(
     budget_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
-    raise ValueError("This is a test error")
     result = db.execute(
-        select(Budget).where(Budget.id == budget_id)
+    select(Budget).where(
+        Budget.id == budget_id,
+        Budget.user_id == current_user.id
     )
+)
 
     budget = result.scalar_one_or_none()
 
@@ -281,10 +297,14 @@ def get_budget(
 )
 def delete_budget(
     budget_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     result = db.execute(
-        select(Budget).where(Budget.id == budget_id)
+        select(Budget).where(
+            Budget.id == budget_id,
+            Budget.user_id == current_user.id
+        )
     )
 
     budget = result.scalar_one_or_none()
